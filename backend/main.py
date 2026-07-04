@@ -57,17 +57,32 @@ async def lifespan(app: FastAPI):
         # Import di sini agar startup gagal dengan pesan jelas jika
         # tensorflow/sklearn belum terpasang, tanpa membuat modul gagal
         # di-import lebih awal.
-        from tensorflow import keras
+        from model_arch import build_dnn
 
         with open(MODEL_DIR / "meta.json") as f:
             meta = json.load(f)
 
-        model = keras.models.load_model(MODEL_DIR / meta["model_file"])
         preprocessor = joblib.load(MODEL_DIR / "preprocessor.pkl")
         y_scaler = joblib.load(MODEL_DIR / "y_scaler.pkl")
         pca = None
         if meta.get("use_pca"):
             pca = joblib.load(MODEL_DIR / "pca.pkl")
+            n_features = pca.n_components_
+        else:
+            # Jumlah fitur setelah preprocessing (numerik + one-hot),
+            # dihitung dari preprocessor -- tidak di-hardcode agar selalu
+            # cocok dengan preprocessor.pkl yang sedang dipakai.
+            n_features = len(preprocessor.get_feature_names_out())
+
+        # Bangun ulang arsitektur di kode (bukan load_model dari file
+        # .keras utuh), lalu load weights saja. Ini menghindari error
+        # ketidakcocokan format model.get_config() antar versi Keras
+        # (mis. "Unrecognized keyword arguments ... quantization_config").
+        model = build_dnn(n_features)
+        weights_file = meta.get(
+            "weights_file", meta["model_file"].replace(".keras", ".weights.h5")
+        )
+        model.load_weights(str(MODEL_DIR / weights_file))
 
         ml_artifacts["model"] = model
         ml_artifacts["preprocessor"] = preprocessor
