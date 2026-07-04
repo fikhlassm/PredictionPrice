@@ -1,0 +1,6 @@
+{
+  "best_model": "Model 1 (DNN tanpa PCA)",
+  "use_pca": false,
+  "n_components": null,
+  "model_file": "best_dnn_nopca.keras"
+}
