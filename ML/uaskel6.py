@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend, biar tidak buka jendela & tidak nge-block
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
@@ -38,6 +40,15 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Ambang variansi kumulatif yang ingin dipertahankan oleh PCA (95%)
 PCA_VARIANCE_THRESHOLD = 0.95
+
+
+# Helper: simpan plot ke file (menggantikan plt.show yang bikin nge-block)
+def save_plot(filename: str) -> None:
+    """Simpan figure matplotlib aktif ke folder outputs, lalu tutup."""
+    path = OUTPUT_DIR / filename
+    plt.savefig(path, dpi=120, bbox_inches="tight")
+    plt.close("all")
+    print(f"  [plot tersimpan] {path}")
 
 
 # TAHAP 1 - ANALISIS DATASET
@@ -87,7 +98,7 @@ def eda_visualizations(df: pd.DataFrame) -> None:
                           edgecolor="white")
     plt.suptitle("Histogram Seluruh Fitur Numerik", fontsize=14)
     plt.tight_layout()
-    plt.show()
+    save_plot("eda_01_histogram.png")
 
     # --- (b) Boxplot fitur numerik (deteksi outlier) ------------------------
     fig, axes = plt.subplots(3, 3, figsize=(14, 10))
@@ -98,7 +109,7 @@ def eda_visualizations(df: pd.DataFrame) -> None:
         ax.set_visible(False)
     plt.suptitle("Boxplot Fitur Numerik (Deteksi Outlier)", fontsize=14)
     plt.tight_layout()
-    plt.show()
+    save_plot("eda_02_boxplot.png")
 
     # --- (c) Correlation heatmap --------------------------------------------
     plt.figure(figsize=(10, 8))
@@ -107,14 +118,14 @@ def eda_visualizations(df: pd.DataFrame) -> None:
                 square=True, linewidths=0.5, cbar_kws={"shrink": 0.8})
     plt.title("Correlation Heatmap", fontsize=14)
     plt.tight_layout()
-    plt.show()
+    save_plot("eda_03_heatmap.png")
 
     # --- (d) Distribusi target ----------------------------------------------
     plt.figure(figsize=(8, 5))
     sns.histplot(df[TARGET_COL], bins=50, kde=True, color="#C44E52")
     plt.title("Distribusi Target: median_house_value", fontsize=14)
     plt.tight_layout()
-    plt.show()
+    save_plot("eda_04_target_dist.png")
 
     # --- (e) Scatter fitur terpenting (median_income) vs target -------------
     plt.figure(figsize=(8, 5))
@@ -122,7 +133,7 @@ def eda_visualizations(df: pd.DataFrame) -> None:
                     alpha=0.3, s=12, color="#4C72B0")
     plt.title("median_income vs median_house_value", fontsize=14)
     plt.tight_layout()
-    plt.show()
+    save_plot("eda_05_income_vs_target.png")
 
     # --- (f) Sebaran geografis harga rumah ----------------------------------
     plt.figure(figsize=(8, 6))
@@ -133,7 +144,7 @@ def eda_visualizations(df: pd.DataFrame) -> None:
     plt.ylabel("latitude")
     plt.title("Sebaran Geografis Harga Rumah di California", fontsize=14)
     plt.tight_layout()
-    plt.show()
+    save_plot("eda_06_geografis.png")
 
     # --- (g) Pairplot subset fitur penting -----------------------------------
     subset = ["median_income", "housing_median_age", "total_rooms",
@@ -141,8 +152,7 @@ def eda_visualizations(df: pd.DataFrame) -> None:
     pair = sns.pairplot(df[subset].sample(2000, random_state=RANDOM_STATE),
                         diag_kind="kde", plot_kws={"alpha": 0.3, "s": 12})
     pair.figure.suptitle("Pairplot Fitur Penting (sampel 2000)", y=1.02)
-    plt.show()
-
+    save_plot("eda_07_pairplot.png")
 
 
 # TAHAP 3 & 4 - PREPROCESSING (ANTI-LEAKAGE) + SPLITTING + PCA
@@ -263,7 +273,7 @@ def plot_explained_variance(pca_info: dict, threshold: float) -> None:
 
     plt.title("Explained Variance & Cumulative Explained Variance (PCA)")
     plt.tight_layout()
-    plt.show()
+    save_plot("pca_explained_variance.png")
 
 
 # TAHAP 5 - MEMBANGUN DEEP NEURAL NETWORK
@@ -311,12 +321,13 @@ def train_model(model, X_train, y_train, X_val, y_val, checkpoint_path,
     """Melatih model, mengukur waktu training, dan melaporkan epoch terbaik."""
     callbacks = get_callbacks(checkpoint_path)
 
+    print(f"  Mulai training (maks {epochs} epoch, batch={batch_size}) ...")
     start = time.perf_counter()
     history = model.fit(
         X_train, y_train,
         validation_data=(X_val, y_val),
         epochs=epochs, batch_size=batch_size,
-        callbacks=callbacks, verbose=0,
+        callbacks=callbacks, verbose=2,  # 2 = satu baris per epoch, biar kelihatan progressnya
     )
     train_time = time.perf_counter() - start
 
@@ -361,7 +372,7 @@ def plot_loss_curve(history, tag: str) -> None:
     plt.ylabel("Loss (MSE, skala ter-standar)")
     plt.legend()
     plt.tight_layout()
-    plt.show()
+    save_plot(f"loss_curve_{tag}.png")
 
 
 def plot_residual(y_test, y_pred, tag: str) -> None:
@@ -374,7 +385,7 @@ def plot_residual(y_test, y_pred, tag: str) -> None:
     plt.xlabel("Prediksi")
     plt.ylabel("Residual (aktual - prediksi)")
     plt.tight_layout()
-    plt.show()
+    save_plot(f"residual_{tag}.png")
 
 
 def plot_actual_vs_pred(y_test, y_pred, tag: str) -> None:
@@ -388,7 +399,7 @@ def plot_actual_vs_pred(y_test, y_pred, tag: str) -> None:
     plt.ylabel("Prediksi")
     plt.legend()
     plt.tight_layout()
-    plt.show()
+    save_plot(f"actual_vs_pred_{tag}.png")
 
 
 def count_params(model) -> int:
@@ -400,18 +411,6 @@ def count_params(model) -> int:
 def save_artifacts(preprocessor, pca, target_scaler, best_name: str,
                    use_pca: bool, model_file: str, weights_file: str,
                    n_components) -> None:
-    """Menyimpan objek preprocessing & metadata model terbaik.
-
-    Model .keras terbaik sudah otomatis tersimpan lewat ModelCheckpoint
-    saat training (best_dnn_nopca.keras / best_dnn_pca.keras). Selain itu,
-    bobot (weights) model terbaik juga disimpan terpisah (*.weights.h5)
-    karena jauh lebih tahan terhadap perbedaan versi TensorFlow/Keras
-    dibanding file .keras penuh -- berguna jika model perlu dimuat di
-    environment lain (mis. backend) dengan versi library yang berbeda.
-    Di sini kita simpan preprocessor, PCA (jika dipakai), target scaler,
-    dan meta.json supaya proses inference tahu harus lewat PCA atau tidak,
-    dan file model/bobot mana yang harus dipakai.
-    """
     joblib.dump(preprocessor, OUTPUT_DIR / "preprocessor.pkl")
     joblib.dump(target_scaler, OUTPUT_DIR / "y_scaler.pkl")
     if use_pca and pca is not None:
@@ -571,6 +570,7 @@ def main() -> None:
     )
 
     print("\nartefak sudah di folder:", OUTPUT_DIR)
+    print("PIPELINE SELESAI")
 
 
 if __name__ == "__main__":
